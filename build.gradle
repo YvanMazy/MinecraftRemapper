@@ -24,11 +24,11 @@ dependencies {
     api 'org.jcommander:jcommander:2.0'
 
     // Json
-    api 'com.google.code.gson:gson:2.11.0'
+    api 'com.google.code.gson:gson:2.12.1'
 
     // Byte code
     api 'net.md-5:SpecialSource:1.11.4'
-    api 'org.vineflower:vineflower:1.10.1'
+    api 'org.vineflower:vineflower:1.11.0'
 
     // Testing
     testImplementation platform('org.junit:junit-bom:5.10.3')
