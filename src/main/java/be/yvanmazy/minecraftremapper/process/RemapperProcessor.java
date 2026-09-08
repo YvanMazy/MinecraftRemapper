@@ -52,6 +52,7 @@ public class RemapperProcessor {
     private final Path root;
 
     private JsonObject downloadJson;
+    private boolean obfuscated = true;
 
     public RemapperProcessor(final @NotNull PreparationSettings config) {
         this.config = Objects.requireNonNull(config, "config must not be null");
@@ -61,6 +62,8 @@ public class RemapperProcessor {
     public void process() throws ProcessingException {
         this.createOutputDirectory();
         this.downloadJson = this.downloadVersionJson();
+        // Since Minecraft 26.1, the jars are shipped unobfuscated and no mapping is published anymore
+        this.obfuscated = this.downloadJson.has(this.config.getTargetKey() + "_mappings");
 
         final DownloadResult jarResult = this.downloadJar();
         // Unpack server version jar
@@ -71,20 +74,31 @@ public class RemapperProcessor {
                 this.unpackServerJar(jarResult.path());
             }
         }
-        final Path mappingPath = this.downloadMapping();
-        if (this.config.remap()) {
-            final Path remapPath = this.remapJar(jarResult, mappingPath, this.getRemappedJarPath());
-            if (this.config.decompile()) {
-                LOGGER.info("Decompiling...");
-                final Path path = remapPath.resolveSibling("decompiled");
-                try {
-                    FileUtil.recursiveDelete(path);
-                } catch (final IOException e) {
-                    LOGGER.error("Failed to delete directory with decompiled files, continue to decompile...", e);
-                }
-                Decompiler.builder().inputs(remapPath.toFile()).output(new DirectoryResultSaver(path.toFile())).build().decompile();
+        final Path sourcePath;
+        if (this.obfuscated) {
+            final Path mappingPath = this.downloadMapping();
+            if (!this.config.remap()) {
+                return;
             }
+            sourcePath = this.remapJar(jarResult, mappingPath, this.getRemappedJarPath());
+        } else {
+            LOGGER.info("SKIP --> Version '{}' is not obfuscated, there is nothing to remap.", this.config.version().id());
+            sourcePath = jarResult.path();
         }
+        if (this.config.decompile()) {
+            LOGGER.info("Decompiling...");
+            final Path path = sourcePath.resolveSibling("decompiled");
+            try {
+                FileUtil.recursiveDelete(path);
+            } catch (final IOException e) {
+                LOGGER.error("Failed to delete directory with decompiled files, continue to decompile...", e);
+            }
+            Decompiler.builder().inputs(sourcePath.toFile()).output(new DirectoryResultSaver(path.toFile())).build().decompile();
+        }
+    }
+
+    public boolean isObfuscated() {
+        return this.obfuscated;
     }
 
     public @NotNull Path getVersionJarPath() {
@@ -96,6 +110,10 @@ public class RemapperProcessor {
     }
 
     public @NotNull Path getRemappedJarPath() {
+        if (!this.obfuscated) {
+            // The version jar is already using readable names
+            return this.getVersionJarPath();
+        }
         return this.root.resolve("remapped-" + this.config.version().id() + ".jar");
     }
 
